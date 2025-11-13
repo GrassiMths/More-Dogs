@@ -1,12 +1,27 @@
+"""
+Interface Streamlit para análise e predição de adoção de cães.
+
+Este módulo fornece uma interface web interativa para:
+- Análise exploratória de dados de abrigos
+- Treinamento de modelos de Machine Learning
+- Visualização de métricas e gráficos
+- Predição de probabilidade de adoção
+
+Autor: More Dogs Project
+"""
+
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
-import os
 import joblib
-from datetime import datetime
+import sys
+import os
 
-# ml
+# Adiciona o diretório raiz ao path para importar módulos
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Machine Learning
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
@@ -18,50 +33,8 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.linear_model import LogisticRegression
 
-# cria pasta models se não existir
-os.makedirs("models", exist_ok=True)
-
-def salvar_modelo(pipe, modelo_nome, acc, f1):
-    """Salva modelo treinado na pasta models/"""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    nome_arquivo = f"models/{modelo_nome}_{timestamp}.pkl"
-    info = {
-        "modelo": pipe,
-        "nome": modelo_nome,
-        "acurácia": acc,
-        "f1_score": f1,
-        "timestamp": timestamp
-    }
-    joblib.dump(info, nome_arquivo)
-    return nome_arquivo
-
-def listar_modelos():
-    """Lista todos os modelos salvos na pasta models/"""
-    modelos = []
-    if os.path.exists("models"):
-        for arquivo in os.listdir("models"):
-            if arquivo.endswith(".pkl"):
-                caminho = os.path.join("models", arquivo)
-                try:
-                    info = joblib.load(caminho)
-                    modelos.append({
-                        "arquivo": arquivo,
-                        "caminho": caminho,
-                        "nome": info.get("nome", "Desconhecido"),
-                        "acurácia": info.get("acurácia", 0),
-                        "f1_score": info.get("f1_score", 0),
-                        "timestamp": info.get("timestamp", "")
-                    })
-                except:
-                    pass
-    return sorted(modelos, key=lambda x: x["timestamp"], reverse=True)
-
-def limpar_modelos():
-    """Remove todos os modelos salvos"""
-    if os.path.exists("models"):
-        for arquivo in os.listdir("models"):
-            if arquivo.endswith(".pkl"):
-                os.remove(os.path.join("models", arquivo))
+# Importa funções compartilhadas
+from src.model_utils import salvar_modelo, listar_modelos, limpar_modelos
 
 # título
 st.title("Análise e Predição de Adoção de Cães")
@@ -144,8 +117,8 @@ with aba_an:
     st.caption("tempo no abrigo por classe de adoção")
     st.plotly_chart(px.histogram(base, x="TimeInShelterDays", color="ClasseAdoção", barmode="overlay", nbins=30, opacity=0.7), use_container_width=True)
 
-    st.caption("peso x idade (cor = adoção)")
-    st.plotly_chart(px.scatter(base, x="AgeMonths", y="WeightKg", color="ClasseAdoção", hover_data=["Breed","Size","PreviousOwner","Vaccinated"]), use_container_width=True)
+    #st.caption("peso x idade (cor = adoção)")
+    #st.plotly_chart(px.scatter(base, x="AgeMonths", y="WeightKg", color="ClasseAdoção", hover_data=["Breed","Size","PreviousOwner","Vaccinated"]), use_container_width=True)
 
     st.caption("top 10 raças por taxa de adoção (mín. 20 cães)")
     g5 = base.groupby("Breed").agg(qtd=("Breed","size"), taxa=("AdoptionLikelihood","mean")).reset_index()

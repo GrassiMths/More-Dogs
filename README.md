@@ -1,107 +1,182 @@
-### Principais funcionalidades
-- **Upload de CSV** com validação de colunas obrigatórias.
-- **Aba Análise**: filtros por porte, raça, vacinação e saúde, com:
-  - métricas rápidas (contagem, taxa média de adoção, tempo médio no abrigo);
-  - gráficos interativos (Plotly) de distribuição, boxplots, dispersão e ranking de raças;
-  - matriz de correlação entre variáveis numéricas.
-- **Aba Machine Learning**:
-  - pré-processamento com `ColumnTransformer` (imputação, One-Hot Encoding e padronização);
-  - seleção de modelo: DecisionTree, RandomForest, KNN, LogisticRegression;
-  - ajustes de hiperparâmetros via UI (sliders);
-  - divisão treino/teste estratificada;
-  - métricas (acurácia e F1) e matriz de confusão;
-  - formulário para predizer a adoção de um novo cão com base no modelo treinado.
-
+# More Dogss
 ---
+## O que faz
 
-### Requisitos
-- Python 3.10+
-- Pacotes/libs (arquivo `requirements.txt`):
-  - streamlit, pandas, numpy, plotly, scikit-learn
+- Analisa dados de cães em abrigos através de gráficos e estatísticas
+- Treina modelos de aprendizado de máquina para prever probabilidade de adoção
+- Permite fazer predições individuais ou em lote
+- Salva modelos treinados para uso posterior
+- Oferece API REST para integração com outros sistemas
 
-Instalação:
+## Requisitos
+
+- Python 3.10 ou superior
+- Pacotes/libs listadas no arquivo `requirements.txt`
+
+## Instalação
+
+1. Crie um ambiente virtual (recomendado):
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # Windows (PowerShell): .venv\Scripts\Activate.ps1
+source .venv/bin/activate  # Linux/Mac
+# Windows: .venv\Scripts\activate
+```
+
+2. Instale as dependências:
+
+```bash
 pip install -r requirements.txt
 ```
 
----
+## Como usar
 
-### Inicialização
+### Interface Web (Streamlit)
+
+Inicie a aplicação:
 
 ```bash
 streamlit run app.py
 ```
 
-Link `http://localhost:8501`.
+`http://localhost:8501`
 
----
+**Passos:**
 
-### Formato do CSV esperado
-O arquivo deve conter ao menos as colunas abaixo (nomes exatos). Registros não caninos serão filtrados automaticamente para `PetType == "dog"`.
-
-| Coluna               | Tipo/Valores                     | Descrição                                                                 |
-|----------------------|----------------------------------|---------------------------------------------------------------------------|
-| PetID                | texto/ID                         | Identificador do pet                                                      |
-| PetType              | texto                            | Tipo do animal (ex.: `"dog"`)                                            |
-| Breed                | texto                            | Raça                                                                      |
-| AgeMonths            | numérico                         | Idade em meses                                                            |
-| Color                | texto                            | Cor                                                                       |
-| Size                 | texto                            | Porte                                                                     |
-| WeightKg             | numérico                         | Peso em kg                                                                |
-| Vaccinated           | inteiro {0,1}                    | 1 se vacinado, 0 caso contrário                                          |
-| HealthCondition      | inteiro {0,1}                    | 0 saudável, 1 com condição médica                                         |
-| TimeInShelterDays    | numérico                         | Tempo no abrigo (dias)                                                    |
-| AdoptionFee          | numérico                         | Taxa de adoção (moeda livre)                                              |
-| PreviousOwner        | inteiro {0,1}                    | 1 se já teve dono, 0 caso contrário                                       |
-| AdoptionLikelihood   | inteiro {0,1}                    | Rótulo alvo: 1 provável adoção, 0 improvável                              |
-
-Notas de tratamento:
-- Valores não numéricos nas colunas numéricas são convertidos para `NaN` e imputados.
-- `Vaccinated`, `HealthCondition`, `PreviousOwner`, `AdoptionLikelihood` são convertidos para inteiros.
-- A análise utiliza filtros e mostra apenas uma amostra/tabulações; o treino usa a base completa de cães com rótulo (`AdoptionLikelihood` não nulo).
-
----
-
-### Como usar
-1. Inicie o app (`streamlit run app.py`) e envie o seu CSV na página inicial.
-2. Na aba **Análise**, ajuste filtros e explore:
-   - métricas de topo;  
-   - gráficos de adoção por porte, idade por classe, tempo no abrigo, peso x idade, ranking por raça (mín. 20 cães) e correlação.
+1. Faça upload de um arquivo CSV com os dados dos pets
+2. Na aba **Análise**, explore os dados com filtros e gráficos
 3. Na aba **Machine Learning**:
-   - escolha o modelo (DecisionTree, RandomForest, KNN, LogisticRegression);
-   - ajuste hiperparâmetros (sliders);
-   - defina a proporção de teste e clique em “Treinar modelo”;
-   - consulte acurácia, F1 e a matriz de confusão;
-   - use o formulário “Predição para novo cão” para simular um novo registro e obter a previsão (e, se disponível, a probabilidade).
+   - Escolha um modelo (DecisionTree, RandomForest, KNN, LogisticRegression)
+   - Ajuste os parâmetros usando os controles deslizantes
+   - Clique em "Treinar modelo" para treinar
+   - Use o formulário para fazer predições individuais
+   - Faça upload de um arquivo test.csv para predições em lote
 
----
+### API Flask
 
-### Modelos e hiperparâmetros (UI)
-- DecisionTree: `max_depth`
-- RandomForest: `n_estimators`, `max_depth`
-- KNN: `n_neighbors`
-- LogisticRegression: `C`, `max_iter` (fixo em 1000 no código)
+Inicie a API:
 
-Pré-processamento:
-- numéricos: imputação por mediana + `StandardScaler`
-- categóricos: imputação por modo + `OneHotEncoder(handle_unknown="ignore")`
+```bash
+python run_api.py
+```
 
----
+**Endpoints principais:**
 
-### Métricas exibidas
-- Acurácia (`accuracy_score`)
-- F1-score binário (`f1_score`, com `zero_division=0`)
-- Matriz de confusão (Plotly Heatmap)
+- `GET /api/models` - Lista modelos disponíveis
+- `POST /api/predict` - Faz predição individual (envie JSON)
+- `POST /api/predict/batch` - Faz predição em lote (envie CSV ou JSON)
 
----
+**Exemplo de predição individual:**
 
-### Estrutura do projeto
+```bash
+curl -X POST http://localhost:5000/api/predict \
+  -H "Content-Type: application/json" \
+  -d '{
+    "Breed": "Labrador",
+    "Color": "Brown",
+    "Size": "Large",
+    "AgeMonths": 24,
+    "WeightKg": 15.5,
+    "TimeInShelterDays": 30,
+    "AdoptionFee": 200,
+    "Vaccinated": 1,
+    "HealthCondition": 0,
+    "PreviousOwner": 0
+  }'
+```
+
+## Formato do arquivo CSV
+
+O arquivo CSV deve conter as seguintes colunas:
+
+| Coluna             | Tipo   | Descrição                                                  |
+| ------------------ | ------ | ---------------------------------------------------------- |
+| PetID              | texto  | Identificador único do pet                                 |
+| PetType            | texto  | Tipo do animal (deve ser "dog")                            |
+| Breed              | texto  | Raça do cão                                                |
+| AgeMonths          | número | Idade em meses                                             |
+| Color              | texto  | Cor                                                        |
+| Size               | texto  | Porte (Small, Medium, Large)                               |
+| WeightKg           | número | Peso em quilogramas                                        |
+| Vaccinated         | 0 ou 1 | 1 se vacinado, 0 se não                                    |
+| HealthCondition    | 0 ou 1 | 0 se saudável, 1 se tem condição                           |
+| TimeInShelterDays  | número | Dias no abrigo                                             |
+| AdoptionFee        | número | Taxa de adoção                                             |
+| PreviousOwner      | 0 ou 1 | 1 se já teve dono, 0 se não                                |
+| AdoptionLikelihood | 0 ou 1 | 1 se provável adoção, 0 se improvável (apenas para treino) |
+
+**Notas:**
+
+- Apenas registros com PetType igual a "dog" serão analisados
+- Valores numéricos inválidos são corrigidos automaticamente
+- Colunas numéricas podem ter valores vazios (serão preenchidos automaticamente)
+
+## Scripts auxiliares
+
+**Dividir dados em treino e teste:**
+
+```bash
+python scripts/split_data.py
+```
+
+Este script divide o arquivo `data/pet_adoption_data.csv` em 70% para treino e 30% para teste.
+
+**Testar a API:**
+
+```bash
+python scripts/test_api.py
+```
+
+## Modelos
+
+1. **DecisionTree** - Árvore de decisão
+
+   - Parâmetro: max_depth (profundidade máxima)
+
+2. **RandomForest** - Floresta aleatória
+
+   - Parâmetros: n_estimators (número de árvores), max_depth
+
+3. **KNN** - K-vizinhos mais próximos
+
+   - Parâmetro: n_neighbors (número de vizinhos)
+
+4. **LogisticRegression** - Regressão logística
+   - Parâmetro: C (força da regularização)
+
+## Estrutura do projeto
+
 ```
 more-dogs/
-├─ app.py
-├─ requirements.txt
-└─ data/               # arquivos de dados locais
+├── app.py                  # Interface web (Streamlit)
+├── run_api.py             # Inicia a API Flask
+├── requirements.txt        # Dependências
+├── README.md               # Este arquivo
+│
+├── src/                    # Código compartilhado
+│   └── model_utils.py     # Funções para gerenciar modelos
+│
+├── api/                    # API Flask
+│   ├── app.py             # Aplicação Flask
+│   └── run.py             # Script alternativo
+│
+├── scripts/                # Scripts auxiliares
+│   ├── split_data.py      # Divide dados
+│   └── test_api.py        # Testa API
+│
+├── data/                   # Arquivos de dados
+│   ├── pet_adoption_data.csv
+│   ├── train.csv
+│   └── test.csv
+│
+└── models/                 # Modelos treinados (criado automaticamente)
+    └── *.pkl
 ```
+
+## Métricas de avaliação
+
+Os modelos são avaliados usando:
+
+- **Acurácia**: Porcentagem de predições corretas
+- **F1-Score**: Medida que combina precisão e recall
+- **Matriz de Confusão**: Mostra quantos acertos e erros de cada tipo
