@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
+import os
+import joblib
+from datetime import datetime
 
 # ml
 from sklearn.model_selection import train_test_split
@@ -14,6 +17,51 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.linear_model import LogisticRegression
+
+# cria pasta models se não existir
+os.makedirs("models", exist_ok=True)
+
+def salvar_modelo(pipe, modelo_nome, acc, f1):
+    """Salva modelo treinado na pasta models/"""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    nome_arquivo = f"models/{modelo_nome}_{timestamp}.pkl"
+    info = {
+        "modelo": pipe,
+        "nome": modelo_nome,
+        "acurácia": acc,
+        "f1_score": f1,
+        "timestamp": timestamp
+    }
+    joblib.dump(info, nome_arquivo)
+    return nome_arquivo
+
+def listar_modelos():
+    """Lista todos os modelos salvos na pasta models/"""
+    modelos = []
+    if os.path.exists("models"):
+        for arquivo in os.listdir("models"):
+            if arquivo.endswith(".pkl"):
+                caminho = os.path.join("models", arquivo)
+                try:
+                    info = joblib.load(caminho)
+                    modelos.append({
+                        "arquivo": arquivo,
+                        "caminho": caminho,
+                        "nome": info.get("nome", "Desconhecido"),
+                        "acurácia": info.get("acurácia", 0),
+                        "f1_score": info.get("f1_score", 0),
+                        "timestamp": info.get("timestamp", "")
+                    })
+                except:
+                    pass
+    return sorted(modelos, key=lambda x: x["timestamp"], reverse=True)
+
+def limpar_modelos():
+    """Remove todos os modelos salvos"""
+    if os.path.exists("models"):
+        for arquivo in os.listdir("models"):
+            if arquivo.endswith(".pkl"):
+                os.remove(os.path.join("models", arquivo))
 
 # título
 st.title("Análise e Predição de Adoção de Cães")
@@ -175,29 +223,156 @@ with aba_ml:
 
     # treino
     if st.button("Treinar modelo"):
-        pipe.fit(X_train, y_train)
-        y_pred = pipe.predict(X_test)
+        with st.spinner("Treinando modelo..."):
+            pipe.fit(X_train, y_train)
+            y_pred = pipe.predict(X_test)
 
-        # métricas
-        acc = accuracy_score(y_test, y_pred)
-        f1 = f1_score(y_test, y_pred, zero_division=0)
-        cmat = confusion_matrix(y_test, y_pred)
+            # métricas
+            acc = accuracy_score(y_test, y_pred)
+            f1 = f1_score(y_test, y_pred, zero_division=0)
+            cmat = confusion_matrix(y_test, y_pred)
 
-        m1, m2 = st.columns(2)
-        m1.metric("acurácia", f"{acc:.3f}")
-        m2.metric("f1-score", f"{f1:.3f}")
+            m1, m2 = st.columns(2)
+            m1.metric("acurácia", f"{acc:.3f}")
+            m2.metric("f1-score", f"{f1:.3f}")
 
-        # matriz de confusão
-        st.caption("matriz de confusão")
-        cm_df = pd.DataFrame(cmat, index=["real:0","real:1"], columns=["pred:0","pred:1"])
-        st.plotly_chart(px.imshow(cm_df, text_auto=True, color_continuous_scale="Blues"), use_container_width=True)
+            # matriz de confusão
+            st.caption("matriz de confusão")
+            cm_df = pd.DataFrame(cmat, index=["real:0","real:1"], columns=["pred:0","pred:1"])
+            st.plotly_chart(px.imshow(cm_df, text_auto=True, color_continuous_scale="Blues"), use_container_width=True)
 
-        # guarda no estado
-        st.session_state["modelo_treinado"] = pipe
+            # salva modelo
+            arquivo_salvo = salvar_modelo(pipe, modelo_nome, acc, f1)
+            st.success(f"Modelo salvo em: {arquivo_salvo}")
+
+            # guarda no estado
+            st.session_state["modelo_treinado"] = pipe
 
     st.markdown("---")
 
-    # formulário de predição
+    # ------------------------- modelos treinados -------------------------
+    st.subheader("Modelos Treinados")
+    
+    modelos_salvos = listar_modelos()
+    
+    if modelos_salvos:
+        st.write(f"**Total de modelos salvos: {len(modelos_salvos)}**")
+        
+        # tabela de modelos
+        df_modelos = pd.DataFrame([
+            {
+                "Modelo": m["nome"],
+                "Acurácia": f"{m['acurácia']:.3f}",
+                "F1-Score": f"{m['f1_score']:.3f}",
+                "Data/Hora": m["timestamp"].replace("_", " "),
+                "Arquivo": m["arquivo"]
+            }
+            for m in modelos_salvos
+        ])
+        st.dataframe(df_modelos, use_container_width=True, hide_index=True)
+        
+        # botão para limpar modelos
+        col_limpar1, col_limpar2 = st.columns([1, 4])
+        with col_limpar1:
+            if st.button("🗑️ Limpar todos os modelos", type="secondary"):
+                limpar_modelos()
+                st.success("Todos os modelos foram removidos!")
+                st.rerun()
+    else:
+        st.info("Nenhum modelo treinado ainda. Treine um modelo acima para salvá-lo automaticamente.")
+    
+    st.markdown("---")
+
+    # ------------------------- predição em lote com test.csv -------------------------
+    st.subheader("Predição em Lote (test.csv)")
+    
+    arquivo_teste = st.file_uploader("Envie o arquivo test.csv", type="csv", key="test_upload")
+    
+    if arquivo_teste:
+        try:
+            dados_teste = pd.read_csv(arquivo_teste)
+            st.write(f"**Registros carregados: {len(dados_teste)}**")
+            
+            # valida colunas necessárias (sem AdoptionLikelihood)
+            colunas_necessarias = [
+                "PetID","PetType","Breed","AgeMonths","Color","Size","WeightKg",
+                "Vaccinated","HealthCondition","TimeInShelterDays","AdoptionFee",
+                "PreviousOwner"
+            ]
+            faltantes_teste = [c for c in colunas_necessarias if c not in dados_teste.columns]
+            
+            if faltantes_teste:
+                st.error(f"Colunas faltando no arquivo de teste: {faltantes_teste}")
+            else:
+                # filtra só cães
+                dados_teste = dados_teste[dados_teste["PetType"].astype(str).str.lower() == "dog"].copy()
+                
+                if dados_teste.empty:
+                    st.warning("Nenhum cão encontrado no arquivo de teste.")
+                else:
+                    # coerção de tipos
+                    for c in ["AgeMonths","WeightKg","TimeInShelterDays","AdoptionFee"]:
+                        dados_teste[c] = pd.to_numeric(dados_teste[c], errors="coerce")
+                    for c in ["Vaccinated","HealthCondition","PreviousOwner"]:
+                        dados_teste[c] = pd.to_numeric(dados_teste[c], errors="coerce").fillna(0).astype(int)
+                    
+                    # seleciona modelo para usar
+                    if modelos_salvos:
+                        st.write("**Selecione um modelo treinado para fazer predições:**")
+                        opcoes_modelos = [f"{m['nome']} (Acc: {m['acurácia']:.3f}) - {m['timestamp']}" for m in modelos_salvos]
+                        modelo_selecionado_idx = st.selectbox("Modelo", range(len(opcoes_modelos)), format_func=lambda x: opcoes_modelos[x])
+                        
+                        if st.button("Fazer predições em lote"):
+                            modelo_info = joblib.load(modelos_salvos[modelo_selecionado_idx]["caminho"])
+                            modelo_carregado = modelo_info["modelo"]
+                            
+                            # prepara dados (sem PetID e PetType)
+                            X_teste = dados_teste.drop(columns=["PetID","PetType"], errors="ignore")
+                            
+                            # faz predições
+                            with st.spinner("Fazendo predições..."):
+                                predicoes = modelo_carregado.predict(X_teste)
+                                
+                                # probabilidades se disponível
+                                if hasattr(modelo_carregado, "predict_proba"):
+                                    probabilidades = modelo_carregado.predict_proba(X_teste)[:, 1]
+                                else:
+                                    probabilidades = predicoes.astype(float)
+                                
+                                # cria dataframe com resultados
+                                resultados = dados_teste[["PetID"]].copy() if "PetID" in dados_teste.columns else pd.DataFrame(index=dados_teste.index)
+                                resultados["Predição"] = predicoes
+                                resultados["Predição_Texto"] = resultados["Predição"].map({0: "Improvável", 1: "Provável"})
+                                resultados["Probabilidade_Adoção"] = probabilidades
+                                
+                                st.success(f"Predições concluídas para {len(resultados)} cães!")
+                                
+                                # exibe resultados
+                                st.subheader("Resultados das Predições")
+                                st.dataframe(resultados, use_container_width=True)
+                                
+                                # estatísticas
+                                col1, col2, col3 = st.columns(3)
+                                col1.metric("Total de cães", len(resultados))
+                                col2.metric("Provável adoção", f"{(resultados['Predição'] == 1).sum()} ({(resultados['Predição'] == 1).mean():.1%})")
+                                col3.metric("Probabilidade média", f"{resultados['Probabilidade_Adoção'].mean():.1%}")
+                                
+                                # download dos resultados
+                                csv_resultados = resultados.to_csv(index=False).encode('utf-8')
+                                st.download_button(
+                                    label="📥 Download resultados (CSV)",
+                                    data=csv_resultados,
+                                    file_name=f"predicoes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                    mime="text/csv"
+                                )
+                    else:
+                        st.warning("Nenhum modelo treinado disponível. Treine um modelo acima primeiro.")
+        except Exception as e:
+            st.error(f"Erro ao processar arquivo de teste: {str(e)}")
+    
+    st.markdown("---")
+
+    # ------------------------- formulário de predição individual -------------------------
     st.subheader("Predição para novo cão")
 
     with st.form("form_pred"):
@@ -237,4 +412,3 @@ with aba_ml:
                 st.metric("probabilidade de adoção", f"{prob:.1%}")
             pred = int(modelo.predict(novo)[0])
             st.success("previsto: provável adoção" if pred == 1 else "previsto: improvável adoção")
-
